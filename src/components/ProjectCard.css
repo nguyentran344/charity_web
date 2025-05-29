@@ -1,0 +1,180 @@
+.project-card {
+  display: flex;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1.5rem;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  gap: 1rem;
+  
+}
+
+.project-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.project-image {
+  width: 100%;
+  height: 300px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.project-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.project-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1e40af;
+  margin-bottom: 0.75rem;
+}
+
+.project-description {
+  font-size: 1rem;
+  color: #4b5563;
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+
+.project-info p {
+  font-size: 0.9rem;
+  color: #374151;
+  margin: 0.5rem 0;
+}
+
+.project-amount {
+  font-weight: 600;
+  color: #16a34a;
+}
+
+.project-status-active {
+  font-weight: 600;
+  color: #22c55e;
+}
+
+.project-status-ended {
+  font-weight: 600;
+  color: #ef4444;
+}
+
+.project-creator {
+  font-size: 0.85rem;
+  color: #6b7280;
+  word-break: break-word;
+}
+
+.project-actions {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.project-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.project-button:hover {
+  transform: translateY(-2px);
+}
+
+.project-button:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.project-button-donors {
+  background-color: #22c55e;
+}
+
+.project-button-donors:hover {
+  background-color: #16a34a;
+}
+
+.project-button-donate {
+  background-color: #3b82f6;
+}
+
+.project-button-donate:hover {
+  background-color: #2563eb;
+}
+
+.project-button-end {
+  background-color: #ef4444;
+}
+
+.project-button-end:hover {
+  background-color: #dc2626;
+}
+
+.project-donation {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.project-input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #374151;
+  transition: border-color 0.3s ease;
+}
+
+.project-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.project-input:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .project-card {
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .project-image {
+    width: 100%;
+    height: auto;
+  }
+
+  .project-title {
+    font-size: 1.25rem;
+  }
+
+  .project-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .project-donation {
+    flex-direction: column;
+  }
+}
