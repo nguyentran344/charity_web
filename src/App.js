@@ -1,27 +1,26 @@
 import React, { useState, useEffect } from "react";
-import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
-import { auth } from "./firebase/firebase";
 import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-} from "firebase/auth";
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate, // ← ĐÃ THÊM DÒNG NÀY
+} from "react-router-dom";
 import { ethers } from "ethers";
+
+// Components & Pages
 import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import CreateProjectForm from "./components/CreateProjectForm";
 import ProjectDetail from "./pages/ProjectDetail";
-import "./App.css";
-
-const contractAddress = "0x0E4d13e6D59aAC88F9DedC34e3Fb441362CBC431"; // Thay bằng địa chỉ hợp đồng thực tế nếu cần
+import CreateProjectForm from "./components/CreateProjectForm";
+// Thay bằng địa chỉ contract mới bạn vừa deploy (hoặc dùng tạm cái cũ)
+const contractAddress = "0xB7Ada9f4106E36b476393D03D734DCFc252FaC3f";
 const contractABI = [
   {
     inputs: [
       { internalType: "string", name: "_name", type: "string" },
       { internalType: "string", name: "_description", type: "string" },
       { internalType: "string", name: "_category", type: "string" },
+      { internalType: "uint256", name: "_goal", type: "uint256" }, // Thêm tham số goal khi tạo dự án
     ],
     name: "createProject",
     outputs: [],
@@ -138,6 +137,7 @@ const contractABI = [
           { internalType: "string", name: "category", type: "string" },
           { internalType: "address", name: "creator", type: "address" },
           { internalType: "uint256", name: "totalDonated", type: "uint256" },
+          { internalType: "uint256", name: "goal", type: "uint256" }, // Thêm trường goal
           { internalType: "bool", name: "active", type: "bool" },
           { internalType: "address[]", name: "donors", type: "address[]" },
         ],
@@ -177,222 +177,125 @@ const contractABI = [
     stateMutability: "view",
     type: "function",
   },
-  // (Các phương thức khác nếu có)
 ];
 
-const App = () => {
-  const [user, setUser] = useState(null);
+function App() {
+  const [walletConnected, setWalletConnected] = useState(false);
+  const [currentAccount, setCurrentAccount] = useState("");
+  const [contract, setContract] = useState(null);
   const [projects, setProjects] = useState([]);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // State cho form tạo dự án (dùng chung với CreateProjectForm)
   const [projectName, setProjectName] = useState("");
   const [projectDescription, setProjectDescription] = useState("");
-  const [category, setCategory] = useState("");
-  const [walletConnected, setWalletConnected] = useState(false);
-  const [currentAccount, setCurrentAccount] = useState(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [contract, setContract] = useState(null);
 
   useEffect(() => {
-    const initializeContract = async () => {
-      if (!window.ethereum) {
-        setError("Vui lòng cài đặt MetaMask");
-        return;
-      }
-      try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const network = await provider.getNetwork();
-        const chainId = `0x${network.chainId.toString(16)}`;
-        console.log("Current chainId:", chainId);
-        const expectedChainId = "0xaa36a7";
-        if (chainId !== expectedChainId) {
-          setError("Vui lòng chuyển sang mạng Sepolia");
-          try {
-            await window.ethereum.request({
-              method: "wallet_switchEthereumChain",
-              params: [{ chainId: expectedChainId }],
-            });
-          } catch (switchError) {
-            console.error("Network switch error:", switchError);
-            return;
-          }
-        }
-        const contractInstance = new ethers.Contract(
-          contractAddress,
-          contractABI,
-          provider
-        );
-        console.log("Contract instance:", contractInstance); // Debug
-        if (!contractInstance.projectCount) {
-          console.error("projectCount method not found in contract");
-          setError("Phương thức projectCount không tồn tại trong hợp đồng");
-          return;
-        }
-        setContract(contractInstance);
-
-        const projectCount = await contractInstance.projectCount();
-        console.log("Project count:", Number(projectCount));
-        const projectsArray = [];
-        for (let i = 1; i <= Number(projectCount); i++) {
-          try {
-            const project = await contractInstance.getProject(i);
-            projectsArray.push({
-              id: Number(project.id),
-              name: project.name,
-              description: project.description,
-              category: project.category,
-              imageUrl: "",
-              creator: project.creator,
-              totalDonated: ethers.formatEther(project.totalDonated),
-              active: project.active,
-              donors: project.donors || [],
-            });
-          } catch (err) {
-            console.error(`Error fetching project ${i}:`, err);
-          }
-        }
-        setProjects(projectsArray);
-      } catch (err) {
-        console.error("Error initializing contract:", err);
-        setError("Lỗi khi khởi tạo hợp đồng: " + (err.reason || err.message));
-      }
-    };
-
-    initializeContract();
-    auth.onAuthStateChanged((user) => setUser(user || null));
+    checkIfWalletIsConnected();
   }, []);
+
+  const checkIfWalletIsConnected = async () => {
+    if (!window.ethereum) return;
+    try {
+      const accounts = await window.ethereum.request({
+        method: "eth_accounts",
+      });
+      if (accounts.length > 0) {
+        await connectWalletHandler(accounts[0]);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const connectWallet = async () => {
     if (!window.ethereum) {
-      setError("Vui lòng cài đặt MetaMask");
+      alert("Vui lòng cài MetaMask!");
       return;
     }
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const network = await provider.getNetwork();
-      const chainId = `0x${network.chainId.toString(16)}`;
-      console.log("Connect wallet chainId:", chainId);
-      const expectedChainId = "0xaa36a7";
-      if (chainId !== expectedChainId) {
-        setError("Vui lòng chuyển sang mạng Sepolia");
-        try {
-          await window.ethereum.request({
-            method: "wallet_switchEthereumChain",
-            params: [{ chainId: expectedChainId }],
-          });
-        } catch (switchError) {
-          console.error("Network switch error:", switchError);
-          return;
-        }
-      }
       const accounts = await window.ethereum.request({
         method: "eth_requestAccounts",
       });
-      setCurrentAccount(accounts[0]);
-      setWalletConnected(true);
-      const signer = await provider.getSigner();
-      const contractWithSigner = new ethers.Contract(
-        contractAddress,
-        contractABI,
-        signer
-      );
-      setContract(contractWithSigner);
-      setError("");
+      await connectWalletHandler(accounts[0]);
     } catch (err) {
-      console.error("Error connecting wallet:", err);
-      setError("Không thể kết nối ví MetaMask: " + (err.reason || err.message));
+      setError("Kết nối ví thất bại: " + err.message);
     }
   };
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      setError("Email và mật khẩu không được để trống");
-      return;
-    }
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      setError("");
-      setEmail("");
-      setPassword("");
-    } catch (err) {
-      setError("Lỗi đăng nhập: " + err.message);
-    }
+  const connectWalletHandler = async (account) => {
+    setCurrentAccount(account);
+    setWalletConnected(true);
+    setError("");
+
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const contractInstance = new ethers.Contract(
+      contractAddress,
+      contractABI,
+      signer
+    );
+    setContract(contractInstance);
+    await loadProjects(contractInstance);
   };
 
-  const handleRegister = async () => {
-    if (!email || !password) {
-      setError("Email và mật khẩu không được để trống");
-      return;
-    }
+  const loadProjects = async (contractInstance) => {
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      setError("");
-      setEmail("");
-      setPassword("");
+      const count = await contractInstance.projectCount();
+      const loaded = [];
+      for (let i = 1; i <= Number(count); i++) {
+        const p = await contractInstance.getProject(i);
+        const savedImage = localStorage.getItem(`project-image-${p.id}`);
+        loaded.push({
+          id: Number(p.id),
+          name: p.name,
+          description: p.description,
+          category: p.category,
+          creator: p.creator,
+          totalDonated: ethers.formatEther(p.totalDonated),
+          goal: ethers.formatEther(p.goal),
+          active: p.active,
+          imageUrl:
+            savedImage || "https://placehold.co/400x300?text=Charity+Project",
+        });
+      }
+      setProjects(loaded.reverse()); // mới nhất lên đầu
     } catch (err) {
-      setError("Lỗi đăng ký: " + err.message);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      setError("");
-    } catch (err) {
-      setError("Lỗi đăng xuất: " + err.message);
+      console.error("Load projects error:", err);
     }
   };
 
   const handleCreateProject = async (name, description, imageUrl, category) => {
-    if (!walletConnected) {
-      setError("Vui lòng kết nối ví MetaMask");
-      return;
-    }
-    if (!name.trim() || !description.trim() || !imageUrl || !category) {
-      setError("Tên dự án, mô tả, ảnh và danh mục không được để trống");
-      return;
-    }
+    if (!contract) return;
     setLoading(true);
+    setError("");
     try {
-      const contractWithSigner = contract.connect(
-        await new ethers.BrowserProvider(window.ethereum).getSigner()
-      );
-      const tx = await contractWithSigner.createProject(
+      const tx = await contract.createProject(
         name,
         description,
-        category
+        category,
+        ethers.parseEther("10") // bạn có thể thêm field goal sau
       );
       await tx.wait();
-      setError("");
-      alert("Tạo dự án thành công!");
-      const projectCount = await contract.projectCount(); // Sử dụng contract đã kết nối
-      const project = await contract.getProject(projectCount);
-      setProjects([
-        ...projects,
-        {
-          id: Number(project.id),
-          name: project.name,
-          description: project.description,
-          category: project.category,
-          imageUrl: imageUrl,
-          creator: project.creator,
-          totalDonated: ethers.formatEther(project.totalDonated),
-          active: project.active,
-          donors: project.donors || [],
-        },
-      ]);
+
+      const newId = await contract.projectCount();
+      localStorage.setItem(`project-image-${newId}`, imageUrl);
+
+      alert("Tạo dự án thành công! Cảm ơn lòng tốt của bạn");
+      await loadProjects(contract);
+
+      // Reset form
       setProjectName("");
       setProjectDescription("");
-      setCategory("");
     } catch (err) {
-      console.error("Error creating project:", err);
-      setError("Lỗi tạo dự án: " + (err.reason || err.message));
+      setError(err.reason || err.message || "Giao dịch thất bại");
     } finally {
       setLoading(false);
     }
   };
 
+  // THÊM HÀM NÀY VÀO App.js – NGAY SAU handleCreateProject
   const handleDonate = async (
     projectId,
     amount,
@@ -400,88 +303,44 @@ const App = () => {
     isAnonymous,
     donorName
   ) => {
-    if (!walletConnected) {
+    if (!contract || !walletConnected) {
       setError("Vui lòng kết nối ví MetaMask");
       return;
     }
-    const donationAmount = parseFloat(amount);
-    if (isNaN(donationAmount) || donationAmount <= 0) {
-      setError("Số tiền quyên góp phải là số dương");
-      return;
-    }
-    if (message.length > 200) {
-      setError("Lời nhắn không được quá 200 ký tự");
-      return;
-    }
-    if (!isAnonymous && !donorName.trim()) {
-      setError("Vui lòng nhập tên nếu chọn công khai");
-      return;
-    }
-    const project = projects.find((p) => p.id === projectId);
-    if (!project || !project.active) {
-      setError("Dự án không tồn tại hoặc đã kết thúc");
-      return;
-    }
+
     setLoading(true);
+    setError("");
     try {
-      const contractWithSigner = contract.connect(
-        await new ethers.BrowserProvider(window.ethereum).getSigner()
-      );
-      const tx = await contractWithSigner.donate(
+      const tx = await contract.donate(
         projectId,
-        message,
-        isAnonymous,
-        donorName,
-        {
-          value: ethers.parseEther(donationAmount.toString()),
-        }
+        message || "",
+        isAnonymous || false,
+        isAnonymous ? "" : donorName || "",
+        { value: ethers.parseEther(amount.toString()) }
       );
       await tx.wait();
-      setError("");
-      alert("Quyên góp thành công!");
-      const updatedProject = await contract.getProject(projectId);
-      setProjects(
-        projects.map((p) =>
-          p.id === projectId
-            ? {
-                ...p,
-                totalDonated: ethers.formatEther(updatedProject.totalDonated),
-                donors: updatedProject.donors || p.donors,
-              }
-            : p
-        )
-      );
+
+      alert("Quyên góp thành công! Cảm ơn tấm lòng của bạn");
+      await loadProjects(contract); // refresh lại danh sách
     } catch (err) {
-      setError("Lỗi quyên góp: " + (err.reason || err.message));
+      console.error("Donate error:", err);
+      setError(err.reason || err.message || "Giao dịch thất bại");
     } finally {
       setLoading(false);
     }
   };
 
+  // Nếu bạn có nút "Kết thúc dự án" thì thêm luôn hàm này (tùy chọn)
   const handleEndProject = async (projectId) => {
-    if (!walletConnected) {
-      setError("Vui lòng kết nối ví MetaMask");
-      return;
-    }
-    const project = projects.find((p) => p.id === projectId);
-    if (!project || !project.active) {
-      setError("Dự án không tồn tại hoặc đã kết thúc");
-      return;
-    }
+    if (!contract) return;
     setLoading(true);
     try {
-      const contractWithSigner = contract.connect(
-        await new ethers.BrowserProvider(window.ethereum).getSigner()
-      );
-      const tx = await contractWithSigner.endProject(projectId);
+      const tx = await contract.endProject(projectId);
       await tx.wait();
-      setError("");
-      alert("Kết thúc dự án thành công!");
-      setProjects(
-        projects.map((p) => (p.id === projectId ? { ...p, active: false } : p))
-      );
+      alert("Dự án đã được kết thúc");
+      await loadProjects(contract);
     } catch (err) {
-      setError("Lỗi kết thúc dự án: " + (err.reason || err.message));
+      setError(err.reason || err.message);
     } finally {
       setLoading(false);
     }
@@ -489,66 +348,47 @@ const App = () => {
 
   return (
     <Router>
-      <div className="min-h-screen bg-gray-100">
-        <Navbar
-          user={user}
-          handleLogout={handleLogout}
-          connectWallet={connectWallet}
-          walletConnected={walletConnected}
+      <Navbar
+        currentAccount={currentAccount}
+        walletConnected={walletConnected}
+        connectWallet={connectWallet}
+      />
+
+      {loading && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-blue-100 text-blue-800 px-8 py-4 rounded-full shadow-lg z-50 font-bold">
+          Đang xử lý giao dịch...
+        </div>
+      )}
+
+      {error && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-red-100 text-red-800 px-8 py-4 rounded-full shadow-lg z-50 font-bold max-w-2xl text-center">
+          Lỗi: {error}
+        </div>
+      )}
+
+      <Routes>
+        <Route path="/" element={<Home projects={projects} />} />
+
+        <Route
+          path="/project/:id"
+          element={
+            <ProjectDetail
+              projects={projects}
+              contract={contract}
+              currentAccount={currentAccount}
+              walletConnected={walletConnected}
+              loadProjects={() => loadProjects(contract)}
+              handleDonate={handleDonate}
+            />
+          }
         />
-        <div className="container mx-auto p-4">
-          {error && <p className="text-red-500">{error}</p>}
-          {loading && <p className="text-blue-500">Đang xử lý...</p>}
-          {!contract && (
-            <p className="text-yellow-500">
-              Đang khởi tạo hợp đồng thông minh...
-            </p>
-          )}
-          <Routes>
-            <Route path="/" element={<Home projects={projects} />} />
-            <Route
-              path="/project/:id"
-              element={
-                <ProjectDetail
-                  projects={projects}
-                  handleDonate={handleDonate}
-                  handleEndProject={handleEndProject}
-                  user={user}
-                  currentAccount={currentAccount}
-                  walletConnected={walletConnected}
-                  contract={contract}
-                />
-              }
-            />
-            <Route
-              path="/login"
-              element={
-                <Login
-                  email={email}
-                  setEmail={setEmail}
-                  password={password}
-                  setPassword={setPassword}
-                  handleLogin={handleLogin}
-                  error={error}
-                />
-              }
-            />
-            <Route
-              path="/register"
-              element={
-                <Register
-                  email={email}
-                  setEmail={setEmail}
-                  password={password}
-                  setPassword={setPassword}
-                  handleRegister={handleRegister}
-                  error={error}
-                />
-              }
-            />
-            <Route
-              path="/create-project"
-              element={
+
+        {/* TRANG TẠO DỰ ÁN – CĂN GIỮA HOÀN HẢO, ĐẸP TUYỆT ĐỐI */}
+        <Route
+          path="/create-project"
+          element={
+            walletConnected ? (
+              <div className="pt-24 min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-amber-50 flex items-center justify-center">
                 <CreateProjectForm
                   projectName={projectName}
                   setProjectName={setProjectName}
@@ -557,13 +397,29 @@ const App = () => {
                   handleCreateProject={handleCreateProject}
                   error={error}
                 />
-              }
-            />
-          </Routes>
-        </div>
-      </div>
+              </div>
+            ) : (
+              <div className="pt-24 min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-amber-50 flex items-center justify-center">
+                <div className="text-center p-12 bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl">
+                  <h2 className="text-5xl font-bold text-purple-700 mb-8">
+                    Kết nối ví để tạo dự án
+                  </h2>
+                  <button
+                    onClick={connectWallet}
+                    className="bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold py-6 px-16 rounded-full text-2xl shadow-xl hover:scale-105"
+                  >
+                    Kết Nối MetaMask
+                  </button>
+                </div>
+              </div>
+            )
+          }
+        />
+
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
     </Router>
   );
-};
+}
 
 export default App;

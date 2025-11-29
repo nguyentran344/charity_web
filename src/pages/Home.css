@@ -106,7 +106,7 @@
   height: 200px;
   object-fit: cover;
   display: block;
-  margin: 0 auto; /* Căn giữa hình ảnh */
+  margin: 0 auto;
 }
 
 .project-content {
@@ -122,6 +122,21 @@
 .project-content p {
   margin: 5px 0;
   color: #666;
+}
+
+.progress-bar {
+  width: 100%;
+  background-color: #f0f0f0;
+  border-radius: 5px;
+  overflow: hidden;
+  margin: 10px 0;
+}
+
+.progress {
+  height: 20px;
+  background-color: #28a745; /* Màu xanh lá cho tiến độ */
+  border-radius: 5px;
+  transition: width 0.3s ease;
 }
 
 .detail-button {

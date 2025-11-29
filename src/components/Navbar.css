@@ -140,7 +140,8 @@
     max-width: 100%;
   }
 
-  .navbar-link, .navbar-button {
+  .navbar-link,
+  .navbar-button {
     width: 100%;
     justify-content: center;
   }
